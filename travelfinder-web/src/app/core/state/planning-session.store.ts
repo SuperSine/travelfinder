@@ -48,6 +48,8 @@ const initialState = (): PlanningSessionState => ({
 @Injectable({ providedIn: 'root' })
 export class PlanningSessionStore {
   private state: PlanningSessionState = initialState();
+  private abortController?: AbortController;
+  private generation = 0;
 
   private readonly stateSubject = new BehaviorSubject<PlanningSessionSnapshot>(
     this.snapshot()
@@ -74,7 +76,14 @@ export class PlanningSessionStore {
     );
   }
 
+  abort(): void {
+    this.abortController?.abort();
+    this.abortController = undefined;
+  }
+
   start(request: PlanRequest): void {
+    this.abort();
+    this.generation++;
     this.state = {
       phase: 'planning',
       request: { ...request },
@@ -85,6 +94,8 @@ export class PlanningSessionStore {
   }
 
   reset(): void {
+    this.abort();
+    this.generation++;
     this.state = initialState();
     this.emit();
   }
@@ -131,9 +142,35 @@ export class PlanningSessionStore {
 
   async run(client: PlanClient, request: PlanRequest, signal?: AbortSignal): Promise<void> {
     this.start(request);
-    for await (const event of client.stream(request, signal)) {
-      this.apply(event);
+    const runGeneration = this.generation;
+    const controller = new AbortController();
+    this.abortController = controller;
+
+    const onExternalAbort = (): void => controller.abort();
+    signal?.addEventListener('abort', onExternalAbort);
+
+    try {
+      for await (const event of client.stream(request, controller.signal)) {
+        if (runGeneration !== this.generation) {
+          return;
+        }
+        this.apply(event);
+      }
+    } catch (error) {
+      if (this.isAbortError(error)) {
+        return;
+      }
+      throw error;
+    } finally {
+      signal?.removeEventListener('abort', onExternalAbort);
+      if (this.abortController === controller) {
+        this.abortController = undefined;
+      }
     }
+  }
+
+  private isAbortError(error: unknown): boolean {
+    return error instanceof DOMException && error.name === 'AbortError';
   }
 
   private emit(): void {

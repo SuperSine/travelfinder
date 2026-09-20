@@ -1,3 +1,5 @@
+using System.Net;
+using System.Text.Json;
 using TravelfinderAPI.Agents;
 using TravelfinderAPI.Contracts;
 using TravelfinderAPI.Host;
@@ -36,5 +38,34 @@ public class PlanOrchestratorFailoverTests
         Assert.Equal(PlanEventNames.Done, writer.Names[^1]);
         Assert.Contains("\"providerUsed\":\"xai\"", writer.Data[^1]);
         Assert.Equal(1, azure.Calls);
+    }
+
+    [Fact]
+    public async Task Both_models_fail_emits_model_unavailable_error()
+    {
+        var azure = new StubChatClient("azure", new HttpRequestException("down", null, HttpStatusCode.BadGateway));
+        var xai = new StubChatClient("xai", new HttpRequestException("down", null, HttpStatusCode.ServiceUnavailable));
+        var failover = new TravelfinderAPI.Agents.FailoverChatClient(azure, xai);
+        var orchestrator = new PlanOrchestrator(
+            new PlannerAgent(failover, new TrackingPlaceService()),
+            new FakeRenderer([]),
+            new TrackingPlaceService(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<PlanOrchestrator>.Instance,
+            failover);
+
+        var writer = new RecordingSseWriter();
+        await orchestrator.RunAsync(new PlanRequest
+        {
+            RequestId = "r1",
+            Messages = [new ChatMessageDto { Role = "user", Content = "hi" }],
+            Latitude = 1.35,
+            Longitude = 103.82
+        }, writer, CancellationToken.None);
+
+        Assert.Equal(PlanEventNames.Error, writer.Names[0]);
+        Assert.Equal(PlanEventNames.Done, writer.Names[^1]);
+        var error = JsonSerializer.Deserialize<ErrorPayload>(writer.Data[0], PlanJson.Options);
+        Assert.Equal(PlanErrorCode.ModelUnavailable, error!.Code);
+        Assert.True(error.Retryable);
     }
 }

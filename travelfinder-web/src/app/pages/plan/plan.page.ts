@@ -79,6 +79,7 @@ export class PlanPage implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.storeSub?.unsubscribe();
+    this.store.abort();
   }
 
   onSend(text: string): void {

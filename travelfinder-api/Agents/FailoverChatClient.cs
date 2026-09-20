@@ -1,6 +1,9 @@
 using System.Net;
+using System.Reflection;
 using System.Runtime.CompilerServices;
+using Azure;
 using Microsoft.Extensions.AI;
+using System.ClientModel;
 
 namespace TravelfinderAPI.Agents;
 
@@ -30,8 +33,15 @@ public sealed class FailoverChatClient : IChatClient, IModelFailover
         }
         catch (Exception ex) when (IsFailoverWorthy(ex) && !cancellationToken.IsCancellationRequested)
         {
-            LastProviderUsed = "xai";
-            return await _xai.GetResponseAsync(materialized, options, cancellationToken);
+            try
+            {
+                LastProviderUsed = "xai";
+                return await _xai.GetResponseAsync(materialized, options, cancellationToken);
+            }
+            catch (Exception xaiEx)
+            {
+                throw new ModelUnavailableException("Both planning models are unavailable.", xaiEx);
+            }
         }
     }
 
@@ -49,8 +59,15 @@ public sealed class FailoverChatClient : IChatClient, IModelFailover
         }
         catch (Exception ex) when (IsFailoverWorthy(ex) && !cancellationToken.IsCancellationRequested)
         {
-            LastProviderUsed = "xai";
-            source = _xai.GetStreamingResponseAsync(materialized, options, cancellationToken);
+            try
+            {
+                LastProviderUsed = "xai";
+                source = _xai.GetStreamingResponseAsync(materialized, options, cancellationToken);
+            }
+            catch (Exception xaiEx)
+            {
+                throw new ModelUnavailableException("Both planning models are unavailable.", xaiEx);
+            }
         }
 
         await foreach (var update in source.WithCancellation(cancellationToken))
@@ -88,6 +105,51 @@ public sealed class FailoverChatClient : IChatClient, IModelFailover
                 http.StatusCode is HttpStatusCode.TooManyRequests or >= HttpStatusCode.InternalServerError)
             {
                 return true;
+            }
+
+            if (current is RequestFailedException azure && IsFailoverStatusCode(azure.Status))
+            {
+                return true;
+            }
+
+            if (current is ClientResultException client && IsFailoverStatusCode(client.Status))
+            {
+                return true;
+            }
+
+            if (TryGetFailoverStatusCode(current, out var status) && IsFailoverStatusCode(status))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsFailoverStatusCode(int status) =>
+        status is 401 or 403 or 429 or >= 500;
+
+    private static bool TryGetFailoverStatusCode(object exception, out int status)
+    {
+        status = 0;
+        foreach (var propertyName in new[] { "Status", "StatusCode" })
+        {
+            var property = exception.GetType().GetProperty(
+                propertyName,
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            if (property?.GetValue(exception) is not { } value)
+            {
+                continue;
+            }
+
+            switch (value)
+            {
+                case int intStatus:
+                    status = intStatus;
+                    return true;
+                case HttpStatusCode httpStatus:
+                    status = (int)httpStatus;
+                    return true;
             }
         }
 

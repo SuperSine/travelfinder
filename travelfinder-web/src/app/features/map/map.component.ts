@@ -21,6 +21,7 @@ import PopupTemplate from '@arcgis/core/PopupTemplate';
 import * as webMercatorUtils from '@arcgis/core/geometry/support/webMercatorUtils';
 import { GeoPoint, Place } from '../../core/domain/models';
 import { mergePlaceGraphics } from './place-graphics';
+import { MapViewReadyGate } from './map-view-ready-gate';
 
 @Component({
   selector: 'app-map',
@@ -46,6 +47,7 @@ export class MapComponent implements OnInit, OnChanges {
   private readonly routeLayer = new GraphicsLayer({ id: 'route' });
   private drawnIds: string[] = [];
   private routeGraphic?: Graphic;
+  private readonly viewReadyGate = new MapViewReadyGate();
 
   private readonly markerSymbol = new SimpleMarkerSymbol({
     color: '#2563eb',
@@ -79,11 +81,17 @@ export class MapComponent implements OnInit, OnChanges {
 
     await this.view.when();
     this.view.on('click', event => this.onMapClick(event));
+    if (this.viewReadyGate.markReady()) {
+      this.syncPlaces();
+      this.syncRoute();
+      this.syncSelection();
+    }
     this.ready.emit();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (!this.view) {
+    if (!this.viewReadyGate.shouldApply()) {
+      this.viewReadyGate.onChange();
       return;
     }
 

@@ -11,6 +11,23 @@ export class PlanClient {
       signal,
     });
 
+    const contentType = response.headers.get('Content-Type') ?? '';
+    const isEventStream = contentType.toLowerCase().includes('text/event-stream');
+
+    if (!response.ok || !isEventStream) {
+      const message = await this.readErrorMessage(response);
+      yield {
+        type: 'error',
+        error: {
+          code: 'internal',
+          message,
+          requestId: request.requestId,
+          retryable: true,
+        },
+      };
+      return;
+    }
+
     if (!response.body) {
       yield {
         type: 'error',
@@ -45,6 +62,15 @@ export class PlanClient {
       for (const event of parseSseFrames(buffer + '\n\n')) {
         yield event;
       }
+    }
+  }
+
+  private async readErrorMessage(response: Response): Promise<string> {
+    try {
+      const text = await response.text();
+      return text.trim() || response.statusText || 'Request failed';
+    } catch {
+      return response.statusText || 'Request failed';
     }
   }
 }

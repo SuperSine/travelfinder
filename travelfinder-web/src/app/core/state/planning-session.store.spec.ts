@@ -43,6 +43,31 @@ describe('PlanningSessionStore', () => {
     expect(store.snapshot().places.map(p => p.id)).toEqual(['google:1', 'google:2']);
   });
 
+  it('drops events from a superseded run when run() is called again', async () => {
+    const store = new PlanningSessionStore();
+    const park = place('google:park');
+    const firstStream = async function* () {
+      await new Promise(resolve => setTimeout(resolve, 20));
+      yield { type: 'places' as const, places: [place('google:stale')] };
+    };
+    const secondStream = async function* () {
+      yield { type: 'places' as const, places: [park] };
+      yield { type: 'done' as const };
+    };
+
+    const firstRun = store.run(
+      { stream: () => firstStream() } as never,
+      { messages: [], latitude: 1, longitude: 2, requestId: 'r1' }
+    );
+    await store.run(
+      { stream: () => secondStream() } as never,
+      { messages: [], latitude: 1, longitude: 2, requestId: 'r2' }
+    );
+    await firstRun;
+
+    expect(store.snapshot().places.map(p => p.id)).toEqual(['google:park']);
+  });
+
   it('error keeps places and only a new start clears them', () => {
     const store = new PlanningSessionStore();
     store.start({ messages: [], latitude: 1, longitude: 2, requestId: 'r1' });

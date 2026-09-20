@@ -60,6 +60,29 @@ public class PlaceServiceTests
     }
 
     [Fact]
+    public async Task Nearby_high_score_park_survives_after_many_low_score_text_rows()
+    {
+        var google = new StubProvider("google");
+        for (var i = 0; i < 20; i++)
+        {
+            google.TextResult.Add(Place("google", $"far-{i}", $"Unrelated {i}", 10 + i, 110 + i));
+        }
+
+        google.NearbyResult.Add(Place("google", "park", "Nearby Park", 1.3001, 103.8001));
+        var service = new PlaceService([google, new StubProvider("arcgis")]);
+        var spec = new PlanSpec
+        {
+            PointOfInterests = ["museum"],
+            Categories = ["park"],
+            RadiusMeters = 5000,
+        };
+
+        var result = await service.GetMergedPlaces(spec, new GeoPoint(1.3, 103.8), "en-us", CancellationToken.None);
+
+        Assert.Contains(result.Places, p => p.Id == "google:park");
+    }
+
+    [Fact]
     public async Task Fanout_runs_each_poi_text_plus_nearby_plus_arcgis()
     {
         var google = new StubProvider("google");

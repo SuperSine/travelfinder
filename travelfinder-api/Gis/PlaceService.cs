@@ -102,11 +102,17 @@ public sealed class PlaceService : IPlaceService
         var googleResults = googleTasks.Select(t => t.Result).ToList();
         var arcgisResults = arcgisTasks.Select(t => t.Result).ToList();
         var partialFailure = googleResults.Any(r => r.Failed) || arcgisResults.Any(r => r.Failed);
-        var cappedGoogle = googleResults.SelectMany(r => r.Rows).Take(PerSourceCap).ToList();
-        var cappedArcgis = arcgisResults.SelectMany(r => r.Rows).Take(PerSourceCap).ToList();
-        var merged = PlaceDedupe.Merge(cappedGoogle.Concat(cappedArcgis));
+        var allGoogle = googleResults.SelectMany(r => r.Rows).ToList();
+        var allArcgis = arcgisResults.SelectMany(r => r.Rows).ToList();
+        var merged = PlaceDedupe.Merge(allGoogle.Concat(allArcgis));
         var scored = PlaceScoring.Apply(merged.ToList(), spec, origin);
-        var places = scored.Take(MergedCap).ToList();
+        var cappedGoogle = scored.Where(p => p.Source == PlaceSource.Google).Take(PerSourceCap).ToList();
+        var cappedArcgis = scored.Where(p => p.Source == PlaceSource.Arcgis).Take(PerSourceCap).ToList();
+        var places = cappedGoogle
+            .Concat(cappedArcgis)
+            .OrderByDescending(p => p.Score)
+            .Take(MergedCap)
+            .ToList();
 
         return new MergedPlacesResult
         {

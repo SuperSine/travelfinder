@@ -7,6 +7,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="TravelfinderAPI.Tests/**" />
+    <Content Remove="TravelfinderAPI.Tests/**" />
+    <EmbeddedResource Remove="TravelfinderAPI.Tests/**" />
+    <None Remove="TravelfinderAPI.Tests/**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="EntityFramework" Version="6.5.1" />
     <PackageReference Include="Microsoft.SqlServer.Types" Version="160.1000.6" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />

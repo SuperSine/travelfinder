@@ -1,384 +1,156 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
-import { IonicModule } from '@ionic/angular';
-import { MapComponent } from 'src/app/components/map/map.component';
-import { UI5Module } from 'src/app/shared/ui5.module';
-import { NavigationEnd, Router } from '@angular/router';
-import { Observable, filter, from, lastValueFrom, map, of, take } from 'rxjs';
-import { RouteService, StopLayer } from 'src/app/services/route.service';
-import Point from '@arcgis/core/geometry/Point';
+import { Subscription } from 'rxjs';
+import { PlanClient } from '../../core/api/plan-client';
+import {
+  ChatMessageDto,
+  GeoPoint,
+  PlanRequest,
+} from '../../core/domain/models';
+import { PlanningSessionStore } from '../../core/state/planning-session.store';
+import { MapComponent } from '../../features/map/map.component';
+import { ChatPanelComponent } from '../../features/chat/chat-panel.component';
+import { ItineraryCardsComponent } from '../../features/plan/itinerary-cards.component';
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer';
-import MapView from '@arcgis/core/views/MapView';
-import Extent from '@arcgis/core/geometry/Extent';
-import { environment } from 'src/environments/environment';
-import { ApiService, Creator, Message, MessageBody, Place } from 'src/app/services/api.service';
-import * as webMercatorUtils from '@arcgis/core/geometry/support/webMercatorUtils';
-import { LoadingDirective } from 'src/app/directives/app-loading.directive';
-import { AppLoaderComponent } from 'src/app/components/app-loader/app-loader.component';
-import { Helper } from 'src/app/shared/helper';
-import Graphic from '@arcgis/core/Graphic';
-import { LongPressDirective } from 'src/app/directives/long-press.directive';
-import { ModalController } from '@ionic/angular';
-import { PlanDetailComponent } from 'src/app/components/plan-detail/plan-detail.component';
-import { PlaceDetail, PlaceDetailComponent } from 'src/app/components/place-detail/place-detail.component';
-import { GeocodeService } from 'src/app/services/geocode.service';
-import { FeatureLayerService } from 'src/app/services/feature-layer.service';
-import { parse } from 'best-effort-json-parser'
-import { MessageService } from 'src/app/services/message.service';
+import { Place as ApiPlace } from 'src/app/services/api.service';
+
+interface PendingPlan {
+  requestId: string;
+  prompt: string;
+  latitude: number | null;
+  longitude: number | null;
+}
 
 @Component({
   selector: 'sp-plan',
   templateUrl: './plan.page.html',
-  styleUrls: ['./plan.page.scss'],
   standalone: true,
-  imports: [
-            IonicModule,
-            CommonModule,
-            FormsModule,
-            ReactiveFormsModule,
-            UI5Module,
-            MapComponent,
-            AppLoaderComponent,
-            LoadingDirective,
-            LongPressDirective
-          ]
+  imports: [CommonModule, ChatPanelComponent, ItineraryCardsComponent, MapComponent],
 })
-export class PlanPage implements OnInit {
+export class PlanPage implements OnInit, OnDestroy {
+  readonly store = inject(PlanningSessionStore);
+  readonly state$ = this.store.state$;
+  private readonly client = inject(PlanClient, { optional: true }) ?? new PlanClient();
+  private storeSub?: Subscription;
+  private lastClarification?: string;
 
-  constructor(private router:Router,
-              private routeService: RouteService,
-              private fb:FormBuilder,
-              private api:ApiService,
-              private featureLayer: FeatureLayerService,
-              private helper: Helper,
-              private modalCtrl: ModalController,
-              private geocodeService: GeocodeService,
-              private messageService: MessageService) {
-    this.inputForm = this.fb.group({
-      prompt: ['', Validators.required]
-    });
+  messages: ChatMessageDto[] = [];
+  requestId = '';
+  latitude: number | null = null;
+  longitude: number | null = null;
+  needsMapPick = false;
+  selectedId: string | null = null;
 
-    this.currentCoords = {lat:0,lng:0};
-    this.messageBody = {
-      system: "",
-      messages: [],
-      tokenUsed: 0,
-      graphicsJSON:[],
-      latitude: 0,
-      longitude: 0,
-      plan: null
-    };
-
-    this.fullPlan = new Plan();
-  }
-
-  async ngOnInit() {
-    this.router.events.pipe(filter(event => event instanceof NavigationEnd))
-                      .subscribe(event => {
-                        this.jsonResult = "";
-                        this.updateTitle(this.planId)
-
-                        this.messageBody = this.messageService.readMessags(this.planId);
-
-                        if (this.messageBody.graphicsJSON.length > 0) {
-                          const graphicLayers = this.messageService.fromGraphicJson(this.messageBody);
-
-                          this.layers = of(graphicLayers);
-                        } else {
-                          this.layers = new Observable<GraphicsLayer[]>();
-                        }
-
-
-      });
-
-      this.api.jsonMessage.subscribe(async message => {
-        if (!message) return;
-
-        this.jsonResult += message;
-
-        let detlaPlan = parse(this.jsonResult);
-        this.fullPlan.updatePlan(detlaPlan);
-
-        if (this.fullPlan.getPlaces().length > 0) {
-          this.stopLayer.graphics.removeAll();
-
-          await this.routeService.upsertStopLayer(this.stopLayer, this.fullPlan.getPlaces());
-          this.layers = of([this.stopLayer]);
-        }
-
-      });
-  }
-
-  get planId() {
-    const reg = /plan\/(.+)/g;
-    const values = reg.exec(this.router.url);
-
-    return values != null ? values[1] : "";
-  }
-
-  async initGroupStopLayer(places: Place[]) {
-    const groupPlaces = this.helper.groupBy(places, place => place.day);
-
-    for(let [day, subPlaces] of groupPlaces) {
-      let stopLayer = this.stopLayers.find(layer => layer.day == day);
-
-      if (!stopLayer) {
-        const newStopLayer = this.routeService.createEmptyStopLayer(day);
-        this.stopLayers.push({day: day, layer: newStopLayer});
-
-        stopLayer = { day: day, layer: newStopLayer };
-      } else {
-        stopLayer.layer.graphics.removeAll();
+  ngOnInit(): void {
+    this.storeSub = this.store.state$.subscribe(snapshot => {
+      if (
+        snapshot.phase === 'clarifying' &&
+        snapshot.clarification &&
+        snapshot.clarification !== this.lastClarification
+      ) {
+        this.lastClarification = snapshot.clarification;
+        this.messages = [
+          ...this.messages,
+          { role: 'assistant', content: snapshot.clarification },
+        ];
       }
-
-      await this.routeService.upsertStopLayer(stopLayer.layer, subPlaces);
-    }
-  }
-
-  async onMapReady(view: MapView) {
-    const scale = view.scale || environment.MAX_SCALE;
-    const radius = scale >= environment.MAX_SCALE ? environment.MAX_SCALE:scale;
-
-    console.log(radius);
-
-    this.currentCoords = this.getCurrentCoords(view);
-
-    view.on("drag", (event:any) => {
-      this.currentCoords = this.getCurrentCoords(view);
     });
 
-    view.on("click", async (event:any) => {
-      this.screenPoint = {
-        x: event.x,
-        y: event.y
-      };
-
-      this.currentCoords = this.getCurrentCoords(view);
-
-      view.hitTest(this.screenPoint).then((response:any) => {
-        if (response.results.length) {
-          const [layer] = response.results.filter((result:any) => {
-            return ["route_layer"].includes(result.layer.id );
-          });
-          console.log(layer);
-
-          if (layer) {
-            this.router.navigateByUrl(`/detail/${layer.graphic.attributes.id}`, { replaceUrl: true } );
-          }
-        }
-      });
-
-      console.log(this.screenPoint);
-    });
-  }
-
-  async onMapPress(event:any) {
-    await this.openModal(new Point({
-      latitude: this.currentCoords.lat,
-      longitude: this.currentCoords.lng
-    }));
-  }
-
-  getCurrentCoords(view:MapView) {
-    let mapCenter = view.extent.center;
-
-    var newPoint = webMercatorUtils.webMercatorToGeographic(mapCenter);
-    const centerJSON = newPoint.toJSON();
-
-    return {
-      lng: centerJSON.x,
-      lat: centerJSON.y
-    };
-  }
-
-  async submit() {
-    this.isLoading = true;
-    this.errorMessage = "";
-
-    let prompt = this.inputForm.getRawValue().prompt;
-
-    const requestMessages = [...this.messageBody.messages, {
-      content: prompt,
-      role: Creator.Me
-    }]
-
-    const lat = this.currentCoords.lat;
-    const lng = this.currentCoords.lng;
-    try
-    {
-      this.stopLayer = this.routeService.createEmptyStopLayer();
-
-      const content = await this.api.getStreamCommandByMessages(this.planId, requestMessages, lat, lng);
-      const error = this.getError(content);
-
-      if (error) {
-        this.errorMessage = error;
-        this.jsonResult = "";
-      } else if (this.stopLayer.graphics.length > 1) {
-        this.messageBody.messages = this.messageBody.messages.concat([
-          {
-            content: prompt,
-            role: Creator.Me
-          },
-          {
-            content: content,
-            role: Creator.Bot
-          }]);
-
-        const layers = this.routeService.createRouteLayer(this.stopLayer, this.planId).pipe(take(1));
-        layers.subscribe(layers => this.processLayers(layers));
-      }
-    }
-    catch(ex){
-      console.log(ex);
-    }
-    finally{
-      this.isLoading = false;
-      this.jsonResult = "";
-    }
-
-  }
-
-  processLayers(layers: GraphicsLayer[]) {
-    const stopLayer = layers.find((layer: any) => layer.id == "stop_layer");
-
-    if (!stopLayer) {
+    const raw = sessionStorage.getItem('tf.pending');
+    if (!raw) {
       return;
     }
 
-    this.fullPlan.updateTravelTime(stopLayer);
+    const pending = JSON.parse(raw) as PendingPlan;
+    this.requestId = pending.requestId;
+    this.needsMapPick = pending.latitude == null || pending.longitude == null;
 
-    console.log(this.fullPlan);
-
-    this.messageBody.graphicsJSON = this.messageService.toGraphicJson(layers);
-    this.messageBody.plan = this.fullPlan;
-
-    this.messageBody.latitude = this.currentCoords.lat;
-    this.messageBody.longitude = this.currentCoords.lng;
-
-    this.messageService.saveMessages(this.planId, this.messageBody);
-    this.layers = of(layers);
-  }
-
-  getLocations(result: any) {
-    const plan = JSON.parse(result);
-    const locations = plan.Locations.map((place:any) => place.Location);
-
-    return locations;
-  }
-
-  getError(result: any) {
-    if (result && !this.helper.isJson(result)) {
-      return result;
+    if (!this.needsMapPick) {
+      this.latitude = pending.latitude as number;
+      this.longitude = pending.longitude as number;
     }
 
-    const message = JSON.parse(result);
+    this.messages = [{ role: 'user', content: pending.prompt }];
 
-    if ((!message.Locations ||  message.Locations.length == 0) && message.Description) {
-      return message.Description;
+    if (!this.needsMapPick) {
+      void this.runPlanning();
     }
-
-    return "";
   }
 
-  clearError() {
-    this.errorMessage = "";
+  ngOnDestroy(): void {
+    this.storeSub?.unsubscribe();
+    this.store.abort();
   }
 
-  updateTitle(planId:string) {
-    const planItems = this.helper.unserializePlanItems();
-    const [planItem] = planItems.filter(item => item.id == planId);
-    this.title = planItem?.value;
+  onSend(text: string): void {
+    this.messages = [...this.messages, { role: 'user', content: text }];
+    if (this.needsMapPick && !this.hasValidCoordinates()) {
+      return;
+    }
+    void this.runPlanning();
   }
 
-  async openModal(locationPoint:Point) {
-    const modal = await this.modalCtrl.create({
-      component: PlaceDetailComponent,
-      componentProps: {
-        locationPoint,
-        cancel: () => {
-          console.log('close');
-
-          modal.dismiss();
-        },
-        save: async (result:PlaceDetail) => {
-          console.log(result);
-
-          await this.saveDetail(result);
-
-          modal.dismiss();
-        }
-      }
-    });
-
-    modal.present();
-
-    const { data, role } = await modal.onWillDismiss();
+  onMapPick(point: GeoPoint): void {
+    this.latitude = point.latitude;
+    this.longitude = point.longitude;
+    this.needsMapPick = false;
+    void this.runPlanning();
   }
 
-  async saveDetail(placeDetail: PlaceDetail) {
-    const requestMessage = {
-      geometry:{
-        spatialReference:{wkid:4326},
-        x: placeDetail.location.longitude,
-        y: placeDetail.location.latitude
-      },
-      attributes:{
-        Name: placeDetail.name,
-        Category: placeDetail.category,
-        Description: placeDetail.description,
-        FormattedAddress: placeDetail.formattedAddress
-      }
+  onPlaceSelect(placeId: string): void {
+    this.selectedId = placeId;
+  }
+
+  onStopSelect(placeId: string): void {
+    this.selectedId = placeId;
+  }
+
+  stopIds(stops: { placeId: string }[]): string[] {
+    return stops.map(stop => stop.placeId);
+  }
+
+  private hasValidCoordinates(): boolean {
+    return this.latitude != null && this.longitude != null;
+  }
+
+  private async runPlanning(): Promise<void> {
+    if (this.needsMapPick && !this.hasValidCoordinates()) {
+      return;
+    }
+    const request: PlanRequest = {
+      requestId: this.requestId,
+      messages: this.messages,
+      latitude: this.latitude as number,
+      longitude: this.longitude as number,
     };
-
-    await this.featureLayer.applyEdits(requestMessage);
+    await this.store.run(this.client, request);
   }
-
-  layers: Observable<GraphicsLayer[]> = new Observable<GraphicsLayer[]>();
-  inputForm: FormGroup<any>;
-  currentCoords:{
-    lat:number,
-    lng:number
-  };
-  messageBody:MessageBody;
-  isLoading:boolean = false;
-  errorMessage: string = "";
-
-  title:string = "Plan";
-  screenPoint:any;
-
-  jsonResult:string = "";
-
-  stopLayer!:GraphicsLayer;
-  stopLayers!: StopLayer[];
-
-  fullPlan: Plan;
 }
 
+/** @deprecated Legacy plan model — retained for api.service and plan-detail until Task 18 */
 export interface PlanModel {
-  name: string,
-  description: string,
-  places: Place[],
-  groupPlaces: Map<number, Place[]>
+  name: string;
+  description: string;
+  places: ApiPlace[];
+  groupPlaces: Map<number, ApiPlace[]>;
 }
 
+/** @deprecated Legacy plan model — retained for api.service and plan-detail until Task 18 */
 export class Plan {
   constructor(rawPlan: any = null) {
     this.planModel = {
-      name: "",
-      description: "",
+      name: '',
+      description: '',
       places: [],
-      groupPlaces: new Map<number, Place[]>()
+      groupPlaces: new Map<number, ApiPlace[]>(),
     };
 
-    if (rawPlan)
-    {
+    if (rawPlan) {
       this.updatePlan(rawPlan);
     }
   }
 
-  static getPlaces(obj: any): Place[] {
+  static getPlaces(obj: any): ApiPlace[] {
     let locations = [];
 
     if (Array.isArray(obj)) {
@@ -387,42 +159,48 @@ export class Plan {
       locations = obj.Locations;
     }
 
-    let places = locations?.filter((place:any)=> this.isValidLocation(place))
-                     .map((location:any):Place => {
-          return {
-            name: location.Name,
-            formattedAddress: location.FormattedAddress,
-            primaryType: location.PrimaryType,
-            location: {
-              latitude: location.Latitude,
-              longitude: location.Longitude,
-            },
-            reason: location.SuggestReason,
-            number: location.Number,
-            day: location.Day,
-            stopTime: location.Duration,
-            priceLevel: location.PriceLevel,
-            travelTime: 0,
-            toggleStatus: false,
-            suggestLocations: [],
-            hint: "",
-            distance: 0,
-            sequence: 0,
-            showDivider: false
-          }
-      });
+    const places = locations
+      ?.filter((place: any) => this.isValidLocation(place))
+      .map(
+        (location: any): ApiPlace => ({
+          name: location.Name,
+          formattedAddress: location.FormattedAddress,
+          primaryType: location.PrimaryType,
+          location: {
+            latitude: location.Latitude,
+            longitude: location.Longitude,
+          },
+          reason: location.SuggestReason,
+          number: location.Number,
+          day: location.Day,
+          stopTime: location.Duration,
+          priceLevel: location.PriceLevel,
+          travelTime: 0,
+          toggleStatus: false,
+          suggestLocations: [],
+          hint: '',
+          distance: 0,
+          sequence: 0,
+          showDivider: false,
+        })
+      );
 
-      return places;
+    return places;
   }
 
-
-  static isValidLocation(location:any) {
-    return location.Name && location.FormattedAddress && location.PrimaryType
-           && location.Latitude && location.Longitude && location.SuggestReason
-           && location.Number;
+  static isValidLocation(location: any) {
+    return (
+      location.Name &&
+      location.FormattedAddress &&
+      location.PrimaryType &&
+      location.Latitude &&
+      location.Longitude &&
+      location.SuggestReason &&
+      location.Number
+    );
   }
 
-  static toLocationJSON(place: Place) {
+  static toLocationJSON(place: ApiPlace) {
     return {
       Name: place.name,
       FormattedAddress: place.formattedAddress,
@@ -433,15 +211,13 @@ export class Plan {
       Number: place.number,
       Day: place.day,
       Duration: place.stopTime,
-      PriceLevel: place.priceLevel
+      PriceLevel: place.priceLevel,
     };
   }
 
   static fromPlanObj(obj: any) {
     const newPlan = new Plan();
-
     newPlan.planModel = obj;
-
     return newPlan;
   }
 
@@ -450,7 +226,10 @@ export class Plan {
   }
 
   totalTime() {
-    return this.planModel.places.reduce((total, place) => total + place.stopTime + place.travelTime, 0);
+    return this.planModel.places.reduce(
+      (total, place) => total + place.stopTime + place.travelTime,
+      0
+    );
   }
 
   totalDistance() {
@@ -462,20 +241,18 @@ export class Plan {
     return {
       Name: this.planModel.name,
       Description: this.planModel.description,
-      Locations: this.planModel.places.map((place: any) => {
-        return {
-          Name: place.name,
-          FormattedAddress: place.formattedAddress,
-          PrimaryType: place.primaryType,
-          Latitude: place.location.latitude,
-          Longitude: place.location.longitude,
-          SuggestReason: place.reason,
-          Number: place.number,
-          Day: place.day,
-          Duration: place.stopTime,
-          PriceLevel: place.priceLevel
-        }
-      })
+      Locations: this.planModel.places.map((place: any) => ({
+        Name: place.name,
+        FormattedAddress: place.formattedAddress,
+        PrimaryType: place.primaryType,
+        Latitude: place.location.latitude,
+        Longitude: place.location.longitude,
+        SuggestReason: place.reason,
+        Number: place.number,
+        Day: place.day,
+        Duration: place.stopTime,
+        PriceLevel: place.priceLevel,
+      })),
     };
   }
 
@@ -490,12 +267,15 @@ export class Plan {
   }
 
   updateTravelTime(stopLayer: GraphicsLayer) {
-    const stopInfoList = stopLayer.graphics.map((graphic: any) => graphic.attributes).sort((a: any, b: any) => a.Sequence - b.Sequence);
+    const stopInfoList = stopLayer.graphics
+      .map((graphic: any) => graphic.attributes)
+      .sort((a: any, b: any) => a.Sequence - b.Sequence);
 
     stopInfoList?.forEach((stop: any, index: number) => {
       if (index > 0) {
         stop.TravelTime = stop.Cumul_TravelTime - stopInfoList.getItemAt(index - 1).Cumul_TravelTime;
-        stop.TravelDistance = stop.Cumul_Kilometers - stopInfoList.getItemAt(index - 1).Cumul_Kilometers;
+        stop.TravelDistance =
+          stop.Cumul_Kilometers - stopInfoList.getItemAt(index - 1).Cumul_Kilometers;
       } else {
         stop.TravelTime = 0;
         stop.TravelDistance = 0;
@@ -503,10 +283,19 @@ export class Plan {
     });
 
     const places = this.getPlaces();
-    places.forEach((place, index) => {
-      place.travelTime = stopInfoList?.find((stop: any) => stop.Number == place.number && stop.Day == place.day)?.TravelTime || 0;
-      place.distance = stopInfoList?.find((stop: any) => stop.Number == place.number && stop.Day == place.day)?.TravelDistance || 0;
-      place.sequence = stopInfoList?.find((stop: any) => stop.Number == place.number && stop.Day == place.day)?.Sequence || 0;
+    places.forEach(place => {
+      place.travelTime =
+        stopInfoList?.find(
+          (stop: any) => stop.Number == place.number && stop.Day == place.day
+        )?.TravelTime || 0;
+      place.distance =
+        stopInfoList?.find(
+          (stop: any) => stop.Number == place.number && stop.Day == place.day
+        )?.TravelDistance || 0;
+      place.sequence =
+        stopInfoList?.find(
+          (stop: any) => stop.Number == place.number && stop.Day == place.day
+        )?.Sequence || 0;
     });
   }
 

@@ -1,34 +1,23 @@
-<ion-header [translucent]="true">
-  <ion-toolbar>
-    <ion-buttons slot="start">
-      <ion-menu-toggle>
-        <ion-menu-button></ion-menu-button>
-      </ion-menu-toggle>
-    </ion-buttons>
-    <ion-title class="title-color">
-        {{title}}
-    </ion-title>
-  </ion-toolbar>
-</ion-header>
-
-  <ion-content [fullscreen]="true">
-    <map [layers]="layers | async" (onReady)="onMapReady($event)" longPress (press)="onMapPress($event)"></map>
-  </ion-content>
-
-  <div class="send-container">
-    <ui5-message-strip class="md:w-3/5" design="Information" [hidden]="!errorMessage" (close)="clearError()">{{errorMessage}}</ui5-message-strip>
-    <div class="m-2 relative flexbox justify-center md:w-2/4 ">
-      <div class="w-full py-2 md:px-4 relative border border-gray/10 rounded-md shadow-[0_0_10px_rgba(0,0,0,0.90)] chat-background">
-        <div [formGroup]="inputForm" class="inputForm">
-          <ui5-textarea formControlName="prompt" class="textarea-width plan-message"
-            placeholder="Where you wanna go?">
-          </ui5-textarea>
-          <ui5-button slot="end"
-            class="send-button rounded-sm text-gray-500 hover:bg-gray-100"
-            (click)="submit()" [disabled]="isLoading">
-            <ui5-icon class="send-icon" name="paper-plane" *appIsLoading="isLoading"></ui5-icon>
-          </ui5-button>
-        </div>
-      </div>
-    </div>
-  </div>
+@if (state$ | async; as state) {
+  <section class="mx-auto grid min-h-[calc(100vh-3.5rem)] max-w-6xl grid-cols-1 lg:grid-cols-2">
+    <aside class="flex flex-col border-b border-slate-200 lg:border-b-0 lg:border-r">
+      <app-chat-panel
+        [messages]="messages"
+        [clarification]="state.clarification"
+        [phase]="state.phase"
+        [errorMessage]="state.error?.message"
+        (send)="onSend($event)"></app-chat-panel>
+      <app-itinerary-cards
+        [stops]="state.stops"
+        (select)="onStopSelect($event)"></app-itinerary-cards>
+    </aside>
+    <app-map
+      class="min-h-[20rem]"
+      [places]="state.places"
+      [selectedId]="selectedId"
+      [stopOrder]="stopIds(state.stops)"
+      [needsMapPick]="needsMapPick"
+      (placeSelect)="onPlaceSelect($event)"
+      (mapPick)="onMapPick($event)"></app-map>
+  </section>
+}

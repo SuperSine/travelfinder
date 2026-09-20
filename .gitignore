@@ -7,4 +7,6 @@
 /travelfinder-api/.vs/TravelfinderAPI/DesignTimeBuild
 /travelfinder-api/.vs/TravelfinderAPI
 /travelfinder-api/obj
+/travelfinder-api/TravelfinderAPI.Tests/bin
+/travelfinder-api/TravelfinderAPI.Tests/obj
 /travelfinder-api/.vs/ProjectEvaluation

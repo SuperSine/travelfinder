@@ -1,16 +1,10 @@
-<ion-header [translucent]="true">
-  <ion-toolbar>
-    <ion-buttons slot="start">
-      <ion-menu-toggle>
-        <ion-menu-button></ion-menu-button>
-      </ion-menu-toggle>
-    </ion-buttons>
-    <ion-title>
-
-    </ion-title>
-  </ion-toolbar>
-</ion-header>
-
-<ion-content [fullscreen]="true">
-  <div>Hello</div>
-</ion-content>
+<div class="mx-auto max-w-xl space-y-4 p-4">
+  <h1 class="text-xl font-semibold">Plan a trip</h1>
+  <textarea
+    [(ngModel)]="prompt"
+    placeholder="Describe the trip"
+    rows="4"
+    class="w-full rounded-md border border-slate-300 p-3 text-sm focus:border-slate-500 focus:outline-none"></textarea>
+  <p class="text-sm text-slate-600">{{ geoStatus }}</p>
+  <ui-button role="start-plan" (click)="startPlanning()">Start planning</ui-button>
+</div>

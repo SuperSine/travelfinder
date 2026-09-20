@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./out-tsc/spec",
+    "types": ["jasmine"],
+    "skipLibCheck": true
+  },
+  "files": [
+    "src/test.ts",
+    "src/polyfills.ts"
+  ],
+  "include": [
+    "src/app/core/**/*.spec.ts",
+    "src/app/features/**/*.spec.ts",
+    "src/app/pages/home/**/*.spec.ts",
+    "src/app/pages/plan/**/*.spec.ts",
+    "src/app/pages/detail/**/*.spec.ts",
+    "src/app/app.component.spec.ts",
+    "src/**/*.d.ts"
+  ]
+}

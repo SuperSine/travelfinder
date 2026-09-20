@@ -1,0 +1,38 @@
+@if (state$ | async; as state) {
+  <article class="mx-auto max-w-2xl space-y-6 p-4">
+    <a routerLink="/plan" class="inline-flex text-sm text-slate-600 hover:text-slate-900 hover:underline">
+      ← Back to plan
+    </a>
+
+    @if (state.spec) {
+      <header class="space-y-1">
+        <h1 class="text-xl font-semibold text-slate-900">{{ state.spec.areaLabel }}</h1>
+        <p class="text-sm text-slate-600">
+          {{ state.spec.dayCount }} day{{ state.spec.dayCount === 1 ? '' : 's' }} ·
+          {{ state.spec.budgetLevel }} budget
+        </p>
+      </header>
+    }
+
+    <section class="space-y-4">
+      @for (group of groupedStops(state.stops); track group.dayIndex) {
+        <div>
+          <h2 class="mb-2 text-sm font-semibold text-slate-700">Day {{ group.dayIndex + 1 }}</h2>
+          <ol class="space-y-2">
+            @for (stop of group.stops; track stop.placeId) {
+              <li class="rounded-md border border-slate-200 p-3">
+                <p class="font-medium text-slate-900">{{ stop.name }}</p>
+                @if (stop.reason) {
+                  <p class="mt-1 text-sm text-slate-600">{{ stop.reason }}</p>
+                }
+                @if (stop.durationMinutes) {
+                  <p class="mt-1 text-xs text-slate-500">{{ stop.durationMinutes }} min</p>
+                }
+              </li>
+            }
+          </ol>
+        </div>
+      }
+    </section>
+  </article>
+}

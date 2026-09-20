@@ -65,10 +65,8 @@ public sealed class PlaceService : IPlaceService
     {
         spec.ClampRadius();
         var radius = spec.RadiusMeters;
-        var partialFailure = false;
-        var googleRows = new List<Contracts.Place>();
-        var arcgisRows = new List<Contracts.Place>();
-        var tasks = new List<Task>();
+        var googleTasks = new List<Task<(IReadOnlyList<Contracts.Place> Rows, bool Failed)>>();
+        var arcgisTasks = new List<Task<(IReadOnlyList<Contracts.Place> Rows, bool Failed)>>();
 
         var google = FindProvider("google");
         var arcgis = FindProvider("arcgis");
@@ -78,34 +76,34 @@ public sealed class PlaceService : IPlaceService
             foreach (var term in spec.PointOfInterests)
             {
                 var query = term;
-                tasks.Add(CollectAsync(
+                googleTasks.Add(CollectAsync(
                     () => google.SearchText(query, origin.Latitude, origin.Longitude, radius, language, cancellationToken),
-                    googleRows,
-                    () => partialFailure = true));
+                    cancellationToken));
             }
 
             if (spec.Categories.Length > 0)
             {
                 var clipped = AllowedGoogleTypes.Clip(spec.Categories);
-                tasks.Add(CollectAsync(
+                googleTasks.Add(CollectAsync(
                     () => google.Nearby(origin.Latitude, origin.Longitude, radius, language, clipped, cancellationToken),
-                    googleRows,
-                    () => partialFailure = true));
+                    cancellationToken));
             }
         }
 
         if (arcgis != null)
         {
-            tasks.Add(CollectAsync(
+            arcgisTasks.Add(CollectAsync(
                 () => arcgis.Nearby(origin.Latitude, origin.Longitude, radius, language, spec.Categories, cancellationToken),
-                arcgisRows,
-                () => partialFailure = true));
+                cancellationToken));
         }
 
-        await Task.WhenAll(tasks);
+        await Task.WhenAll(googleTasks.Concat<Task>(arcgisTasks));
 
-        var cappedGoogle = googleRows.Take(PerSourceCap).ToList();
-        var cappedArcgis = arcgisRows.Take(PerSourceCap).ToList();
+        var googleResults = googleTasks.Select(t => t.Result).ToList();
+        var arcgisResults = arcgisTasks.Select(t => t.Result).ToList();
+        var partialFailure = googleResults.Any(r => r.Failed) || arcgisResults.Any(r => r.Failed);
+        var cappedGoogle = googleResults.SelectMany(r => r.Rows).Take(PerSourceCap).ToList();
+        var cappedArcgis = arcgisResults.SelectMany(r => r.Rows).Take(PerSourceCap).ToList();
         var merged = PlaceDedupe.Merge(cappedGoogle.Concat(cappedArcgis));
         var scored = PlaceScoring.Apply(merged.ToList(), spec, origin);
         var places = scored.Take(MergedCap).ToList();
@@ -126,19 +124,22 @@ public sealed class PlaceService : IPlaceService
     private IPlaceProvider? FindProvider(string name) =>
         _providers.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
 
-    private static async Task CollectAsync(
+    private static async Task<(IReadOnlyList<Contracts.Place> Rows, bool Failed)> CollectAsync(
         Func<Task<IReadOnlyList<Contracts.Place>>> call,
-        List<Contracts.Place> target,
-        Action onFailure)
+        CancellationToken cancellationToken)
     {
         try
         {
             var rows = await call();
-            target.AddRange(rows);
+            return (rows, false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {
-            onFailure();
+            return ([], true);
         }
     }
 }

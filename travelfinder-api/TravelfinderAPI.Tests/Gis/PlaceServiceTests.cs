@@ -47,6 +47,19 @@ public class PlaceServiceTests
     }
 
     [Fact]
+    public async Task Cancellation_is_not_treated_as_partial_failure()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var google = new StubProvider("google") { ThrowOnCancel = true };
+        var service = new PlaceService([google, new StubProvider("arcgis")]);
+        var spec = new PlanSpec { PointOfInterests = ["coffee"] };
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            service.GetMergedPlaces(spec, new GeoPoint(1.3, 103.8), "en-us", cts.Token));
+    }
+
+    [Fact]
     public async Task Fanout_runs_each_poi_text_plus_nearby_plus_arcgis()
     {
         var google = new StubProvider("google");
@@ -83,6 +96,7 @@ public class PlaceServiceTests
         public int LastCacheHits { get; set; }
         public bool ThrowOnNearby { get; set; }
         public bool ThrowOnText { get; set; }
+        public bool ThrowOnCancel { get; set; }
         public bool NearbyCalled { get; private set; }
         public int LastRadius { get; private set; }
         public List<string> TextQueries { get; } = [];
@@ -93,6 +107,11 @@ public class PlaceServiceTests
         {
             LastRadius = radiusMeters;
             TextQueries.Add(query);
+            if (ThrowOnCancel && cancellationToken.IsCancellationRequested)
+            {
+                throw new OperationCanceledException(cancellationToken);
+            }
+
             if (ThrowOnText) throw new HttpRequestException("google down");
             return Task.FromResult<IReadOnlyList<Place>>(TextResult);
         }
@@ -101,6 +120,11 @@ public class PlaceServiceTests
         {
             NearbyCalled = true;
             LastRadius = radiusMeters;
+            if (ThrowOnCancel && cancellationToken.IsCancellationRequested)
+            {
+                throw new OperationCanceledException(cancellationToken);
+            }
+
             if (ThrowOnNearby) throw new HttpRequestException("google down");
             return Task.FromResult<IReadOnlyList<Place>>(NearbyResult);
         }

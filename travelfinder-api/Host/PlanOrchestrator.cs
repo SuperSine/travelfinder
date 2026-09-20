@@ -12,19 +12,22 @@ public sealed class PlanOrchestrator
     private readonly IPlaceService _placeService;
     private readonly ILogger<PlanOrchestrator> _logger;
     private readonly IModelFailover? _failover;
+    private readonly TimeSpan _operationTimeout;
 
     public PlanOrchestrator(
         IPlanner planner,
         IRenderer renderer,
         IPlaceService placeService,
         ILogger<PlanOrchestrator> logger,
-        IModelFailover? failover = null)
+        IModelFailover? failover = null,
+        TimeSpan? operationTimeout = null)
     {
         _planner = planner;
         _renderer = renderer;
         _placeService = placeService;
         _logger = logger;
         _failover = failover;
+        _operationTimeout = operationTimeout ?? TimeSpan.FromSeconds(45);
     }
 
     public async Task RunAsync(PlanRequest request, ISseWriter writer, CancellationToken clientCancellationToken)
@@ -52,7 +55,7 @@ public sealed class PlanOrchestrator
                 return;
             }
 
-            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(45));
+            using var timeoutCts = new CancellationTokenSource(_operationTimeout);
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(clientCancellationToken, timeoutCts.Token);
             var cancellationToken = linkedCts.Token;
 
@@ -76,9 +79,9 @@ public sealed class PlanOrchestrator
             catch (OperationCanceledException)
             {
                 errorCode = PlanErrorCode.Timeout;
-                await WriteErrorAsync(writer, requestId, PlanErrorCode.Timeout, "The request timed out.", retryable: true, cancellationToken);
+                await WriteErrorAsync(writer, requestId, PlanErrorCode.Timeout, "The request timed out.", retryable: true, CancellationToken.None);
                 events.Add(PlanEventNames.Error);
-                await WriteDoneAsync(writer, cancellationToken);
+                await WriteDoneAsync(writer, CancellationToken.None);
                 events.Add(PlanEventNames.Done);
                 return;
             }

@@ -32,6 +32,24 @@ internal sealed class FakePlanner : IPlanner
     }
 }
 
+internal sealed class SlowPlanner : IPlanner
+{
+    private readonly TimeSpan _delay;
+
+    public SlowPlanner(TimeSpan delay) => _delay = delay;
+
+    public async Task<PlannerOutcome> PlanAsync(
+        IReadOnlyList<ChatMessageDto> messages,
+        double latitude,
+        double longitude,
+        string language,
+        CancellationToken cancellationToken)
+    {
+        await Task.Delay(_delay, cancellationToken);
+        return new PlannerOutcome { Spec = new PlanSpec() };
+    }
+}
+
 internal sealed class FakeRenderer : IRenderer
 {
     private readonly IReadOnlyList<ItineraryStop> _stops;

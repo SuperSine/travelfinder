@@ -70,12 +70,28 @@ public class PlanOrchestratorTests
         Assert.Equal(PlanErrorCode.NoPlaces, error!.Code);
     }
 
+    [Fact]
+    public async Task Planner_timeout_emits_error_then_done()
+    {
+        var writer = new RecordingSseWriter();
+        var orchestrator = Create(
+            planner: new SlowPlanner(TimeSpan.FromSeconds(10)),
+            operationTimeout: TimeSpan.FromMilliseconds(50));
+
+        await orchestrator.RunAsync(ValidRequest(), writer, CancellationToken.None);
+
+        Assert.Equal([PlanEventNames.Error, PlanEventNames.Done], writer.Names);
+        var error = JsonSerializer.Deserialize<ErrorPayload>(writer.Data[0], PlanJson.Options);
+        Assert.Equal(PlanErrorCode.Timeout, error!.Code);
+    }
+
     private static PlanOrchestrator Create(
         IPlanner planner,
         IReadOnlyList<Place>? places = null,
         IReadOnlyList<ItineraryStop>? stops = null,
-        IPlaceService? placeService = null) =>
-        new(planner, new FakeRenderer(stops ?? []), placeService ?? new TrackingPlaceService(places ?? []), NullLogger());
+        IPlaceService? placeService = null,
+        TimeSpan? operationTimeout = null) =>
+        new(planner, new FakeRenderer(stops ?? []), placeService ?? new TrackingPlaceService(places ?? []), NullLogger(), operationTimeout: operationTimeout);
 
     private static PlanRequest ValidRequest() => new()
     {

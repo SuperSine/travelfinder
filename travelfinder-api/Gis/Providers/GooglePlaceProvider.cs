@@ -35,6 +35,7 @@ public sealed class GooglePlaceProvider : IPlaceProvider
         string language,
         CancellationToken cancellationToken)
     {
+        _lastCacheHits = 0;
         var point = new GeoPoint(latitude, longitude);
         var cacheKey = PlaceCacheKeys.Text(Name, query, point, radiusMeters, language);
         if (_cache.TryGetValue(cacheKey, out IReadOnlyList<Contracts.Place>? cached) && cached is not null)
@@ -89,6 +90,7 @@ public sealed class GooglePlaceProvider : IPlaceProvider
         string[] categories,
         CancellationToken cancellationToken)
     {
+        _lastCacheHits = 0;
         var point = new GeoPoint(latitude, longitude);
         var includedTypes = AllowedGoogleTypes.Clip(categories);
         if (includedTypes.Length == 0)
@@ -141,6 +143,7 @@ public sealed class GooglePlaceProvider : IPlaceProvider
 
     public async Task<string> ReverseGeocode(double latitude, double longitude, CancellationToken cancellationToken)
     {
+        _lastCacheHits = 0;
         var point = new GeoPoint(latitude, longitude);
         var cacheKey = PlaceCacheKeys.Reverse(point);
         if (_cache.TryGetValue(cacheKey, out string? cached) && cached is not null)
@@ -152,8 +155,8 @@ public sealed class GooglePlaceProvider : IPlaceProvider
         try
         {
             var apiKey = ResolveApiKey();
-            var path = $"maps/api/geocode/json?result_type=administrative_area_level_1&latlng={latitude},{longitude}&key={apiKey}";
-            var response = await _httpClient.GetAsync(path, cancellationToken);
+            var url = $"https://maps.googleapis.com/maps/api/geocode/json?result_type=administrative_area_level_1&latlng={latitude},{longitude}&key={apiKey}";
+            var response = await _httpClient.GetAsync(url, cancellationToken);
             if (!response.IsSuccessStatusCode)
                 return "";
 

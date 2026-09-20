@@ -26,6 +26,10 @@ import { UiButtonComponent } from '../../ui/ui-button.component';
         <p class="rounded-md bg-amber-50 p-2 text-sm text-amber-900">{{ clarification }}</p>
       }
 
+      @if (errorMessage) {
+        <p class="rounded-md bg-red-50 p-2 text-sm text-red-900">{{ errorMessage }}</p>
+      }
+
       <div class="flex gap-2">
         <textarea
           [(ngModel)]="draft"
@@ -40,6 +44,7 @@ import { UiButtonComponent } from '../../ui/ui-button.component';
 export class ChatPanelComponent {
   @Input() messages: ChatMessageDto[] = [];
   @Input() clarification?: string;
+  @Input() errorMessage?: string;
   @Input() phase: SessionPhase = 'idle';
   @Output() send = new EventEmitter<string>();
 

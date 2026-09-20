@@ -29,20 +29,17 @@ interface PendingPlan {
 })
 export class PlanPage implements OnInit, OnDestroy {
   readonly store = inject(PlanningSessionStore);
+  readonly state$ = this.store.state$;
   private readonly client = inject(PlanClient, { optional: true }) ?? new PlanClient();
   private storeSub?: Subscription;
   private lastClarification?: string;
 
   messages: ChatMessageDto[] = [];
   requestId = '';
-  latitude = 0;
-  longitude = 0;
+  latitude: number | null = null;
+  longitude: number | null = null;
   needsMapPick = false;
   selectedId: string | null = null;
-
-  get stopIds(): string[] {
-    return this.store.snapshot().stops.map(stop => stop.placeId);
-  }
 
   ngOnInit(): void {
     this.storeSub = this.store.state$.subscribe(snapshot => {
@@ -86,6 +83,9 @@ export class PlanPage implements OnInit, OnDestroy {
 
   onSend(text: string): void {
     this.messages = [...this.messages, { role: 'user', content: text }];
+    if (this.needsMapPick && !this.hasValidCoordinates()) {
+      return;
+    }
     void this.runPlanning();
   }
 
@@ -104,12 +104,23 @@ export class PlanPage implements OnInit, OnDestroy {
     this.selectedId = placeId;
   }
 
+  stopIds(stops: { placeId: string }[]): string[] {
+    return stops.map(stop => stop.placeId);
+  }
+
+  private hasValidCoordinates(): boolean {
+    return this.latitude != null && this.longitude != null;
+  }
+
   private async runPlanning(): Promise<void> {
+    if (this.needsMapPick && !this.hasValidCoordinates()) {
+      return;
+    }
     const request: PlanRequest = {
       requestId: this.requestId,
       messages: this.messages,
-      latitude: this.latitude,
-      longitude: this.longitude,
+      latitude: this.latitude as number,
+      longitude: this.longitude as number,
     };
     await this.store.run(this.client, request);
   }

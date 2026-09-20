@@ -75,13 +75,15 @@ builder.Services.AddSingleton<IPlaceProvider>(sp =>
 });
 
 builder.Services.AddSingleton<IPlaceService, PlaceService>();
-builder.Services.AddSingleton<IChatClient>(sp =>
+builder.Services.AddSingleton<TravelfinderAPI.Agents.FailoverChatClient>(sp =>
 {
     var config = sp.GetRequiredService<IConfiguration>();
     var azure = CreateAzureChatClient(config);
     var xai = CreateXaiChatClient(config);
     return new TravelfinderAPI.Agents.FailoverChatClient(azure, xai);
 });
+builder.Services.AddSingleton<IChatClient>(sp => sp.GetRequiredService<TravelfinderAPI.Agents.FailoverChatClient>());
+builder.Services.AddSingleton<IModelFailover>(sp => sp.GetRequiredService<TravelfinderAPI.Agents.FailoverChatClient>());
 builder.Services.AddSingleton<IPlanner, PlannerAgent>();
 builder.Services.AddSingleton<IRenderer, RendererAgent>();
 builder.Services.AddSingleton<PlanOrchestrator>();

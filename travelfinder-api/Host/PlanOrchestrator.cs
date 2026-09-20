@@ -20,6 +20,7 @@ public sealed class PlanOrchestrator
         IPlaceService placeService,
         ILogger<PlanOrchestrator> logger,
         IModelFailover? failover = null,
+        IConfiguration? configuration = null,
         TimeSpan? operationTimeout = null)
     {
         _planner = planner;
@@ -27,7 +28,8 @@ public sealed class PlanOrchestrator
         _placeService = placeService;
         _logger = logger;
         _failover = failover;
-        _operationTimeout = operationTimeout ?? TimeSpan.FromSeconds(45);
+        _operationTimeout = operationTimeout
+            ?? TimeSpan.FromSeconds(configuration?.GetValue("Planning:StreamDeadlineSeconds", 45) ?? 45);
     }
 
     public async Task RunAsync(PlanRequest request, ISseWriter writer, CancellationToken clientCancellationToken)

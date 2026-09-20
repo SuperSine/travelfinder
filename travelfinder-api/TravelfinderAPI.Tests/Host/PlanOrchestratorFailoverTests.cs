@@ -15,7 +15,7 @@ public class PlanOrchestratorFailoverTests
         var xai = new ToolChatClient("""
             {"clarification":"Which neighborhood?","language":"en-us","areaLabel":"Singapore","radiusMeters":5000,"categories":[],"pointOfInterests":[],"budgetLevel":"moderate","dayCount":1,"notes":""}
             """);
-        var failover = new FailoverChatClient(azure, xai);
+        var failover = new TravelfinderAPI.Agents.FailoverChatClient(azure, xai);
         var planner = new PlannerAgent(failover, new TrackingPlaceService());
         var orchestrator = new PlanOrchestrator(
             planner,

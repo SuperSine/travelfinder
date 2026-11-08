@@ -97,6 +97,16 @@
             "main": "src/test.ts",
             "polyfills": "src/polyfills.ts",
             "tsConfig": "tsconfig.spec.json",
+            "include": [
+              "src/app/core/**/*.spec.ts",
+              "src/app/features/**/*.spec.ts",
+              "src/app/pages/home/**/*.spec.ts",
+              "src/app/pages/plan/**/*.spec.ts",
+              "src/app/pages/detail/**/*.spec.ts",
+              "src/app/app.component.spec.ts",
+              "src/app/services/**/*.spec.ts",
+              "src/app/shared/**/*.spec.ts"
+            ],
             "karmaConfig": "karma.conf.js",
             "inlineStyleLanguage": "scss",
             "assets": [
@@ -113,6 +123,17 @@
             "ci": {
               "progress": false,
               "watch": false
+            },
+            "shipped": {
+              "tsConfig": "tsconfig.spec.shipped.json",
+              "include": [
+                "src/app/core/**/*.spec.ts",
+                "src/app/features/**/*.spec.ts",
+                "src/app/pages/home/**/*.spec.ts",
+                "src/app/pages/plan/**/*.spec.ts",
+                "src/app/pages/detail/**/*.spec.ts",
+                "src/app/app.component.spec.ts"
+              ]
             }
           }
         },

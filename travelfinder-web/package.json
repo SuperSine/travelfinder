@@ -9,6 +9,7 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
+    "test:shipped": "ng test --configuration=shipped",
     "lint": "ng lint"
   },
   "private": true,

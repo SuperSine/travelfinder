@@ -1,6 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell, TopNav, Heading } from '@astryxdesign/core';
-import { Providers } from './app/Providers';
+import { Providers } from './providers/Providers';
 import { HomePage } from './pages/HomePage';
 import { PlanPage } from './pages/PlanPage';
 import { DetailPage } from './pages/DetailPage';

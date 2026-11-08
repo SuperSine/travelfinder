@@ -23,8 +23,9 @@
     "src/main.tsx",
     "src/App.tsx",
     "src/app.css",
-    "src/app/Providers.tsx",
+    "src/providers",
     "src/pages",
+    "src/features",
     "src/core",
     "src/config",
     "src/vite-env.d.ts"

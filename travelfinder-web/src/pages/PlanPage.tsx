@@ -4,7 +4,11 @@ import { PlanClient } from '../core/api/plan-client';
 import type { ChatMessageDto, GeoPoint, PlanRequest } from '../core/domain/models';
 import { usePlanningSession } from '../core/state/planning-session';
 import { ChatPanel } from '../features/chat/ChatPanel';
-import { TravelMap } from '../features/map/TravelMap';
+import { lazy, Suspense } from 'react';
+
+const TravelMap = lazy(() =>
+  import('../features/map/TravelMap').then(module => ({ default: module.TravelMap })),
+);
 import { ItineraryCards } from '../features/plan/ItineraryCards';
 import { SpecSummary } from '../features/plan/SpecSummary';
 import './plan-workspace.css';
@@ -139,14 +143,16 @@ export function PlanPage() {
         />
       </aside>
       <div className="plan-workspace__map">
-        <TravelMap
-          places={state.places}
-          selectedId={selectedId}
-          stopOrder={stopIds(state.stops)}
-          needsMapPick={needsMapPick}
-          onPlaceSelect={placeId => setSelectedId(placeId)}
-          onMapPick={onMapPick}
-        />
+        <Suspense fallback={<p className="plan-workspace__map-loading">Loading map…</p>}>
+          <TravelMap
+            places={state.places}
+            selectedId={selectedId}
+            stopOrder={stopIds(state.stops)}
+            needsMapPick={needsMapPick}
+            onPlaceSelect={placeId => setSelectedId(placeId)}
+            onMapPick={onMapPick}
+          />
+        </Suspense>
       </div>
     </section>
   );

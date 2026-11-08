@@ -1,0 +1,38 @@
+.plan-workspace {
+  display: grid;
+  min-height: calc(100vh - 3.5rem);
+  max-width: 72rem;
+  margin: 0 auto;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+  .plan-workspace {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .plan-workspace__aside {
+    border-right: 1px solid var(--color-border);
+  }
+}
+
+.plan-workspace__aside {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--color-border);
+}
+
+@media (min-width: 1024px) {
+  .plan-workspace__aside {
+    border-bottom: none;
+  }
+}
+
+.plan-workspace__map {
+  min-height: 20rem;
+}
+
+.plan-workspace__nav {
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+}

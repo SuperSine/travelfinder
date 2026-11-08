@@ -5,6 +5,8 @@ Status: Draft for review
 Repo: `SuperSine/travelfinder`  
 Path: in-place strangler of the existing monorepo
 
+**Frontend stack superseded:** UI framework choices in §3, §4.2, and §7 (Angular + Tailwind) are replaced by [2026-11-09-react-astryx-frontend-design.md](./2026-11-09-react-astryx-frontend-design.md) (React 19 + Astryx). API, SSE event contract, Place facade, and backend boundaries in this document remain authoritative.
+
 ## 1. Purpose and success criteria
 
 Reconstruct Travelfinder as a platform without turning it into a new product.
@@ -51,7 +53,7 @@ GIS problems that this design addresses:
 | Topic | Decision |
 |---|---|
 | Reconstruction goal | Platform refactor; product shape may change slightly |
-| Frontend stack | Keep Angular; remove Ionic and UI5; Tailwind + a few tiny primitives |
+| Frontend stack | Superseded: React 19 + Astryx per 2026-11-09 design (was: Keep Angular; remove Ionic and UI5; Tailwind + a few tiny primitives) |
 | Agent shape | Two-stage: Planner then Retriever/Renderer |
 | GIS | Unified Place facade; Google + ArcGIS are providers |
 | Conversation protocol | One SSE connection with typed events |
@@ -92,6 +94,8 @@ Single port: `IPlaceService`. Methods required this slice: `SearchText`, `Nearby
 Merge, dedupe, scoring, and cache live in the facade, not in each provider.
 
 ### 4.2 Frontend layers (same Angular app)
+
+> **Superseded:** Framework is React 19 + Astryx (Vite SPA). Folder names and `PlanClient` / SSE responsibilities below still apply; see [2026-11-09-react-astryx-frontend-design.md](./2026-11-09-react-astryx-frontend-design.md).
 
 **Shell**  
 Keep `home` / `plan` / `detail`. Replace Ionic menu/tabs/`ion-*` layout with a Tailwind shell: top bar + main pane. Plan workspace is chat + map side by side on desktop, stacked on mobile.
@@ -287,6 +291,8 @@ Process memory only. No Redis this slice.
 Planner should not loop Nearby itself. Retrieval is Host-triggered after `plan_spec`. That is the main GIS cost control.
 
 ## 7. Frontend structure and Tailwind migration
+
+> **Superseded:** Tailwind + Angular migration steps are replaced by the React + Astryx slice plan in [2026-11-09-react-astryx-frontend-design.md](./2026-11-09-react-astryx-frontend-design.md). Routes, session phases, map rules, and SSE handling in this section remain valid.
 
 ### 7.1 Pages
 

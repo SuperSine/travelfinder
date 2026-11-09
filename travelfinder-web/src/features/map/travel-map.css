@@ -1,0 +1,7 @@
+@import 'https://js.arcgis.com/4.29/esri/themes/light/main.css';
+
+.travel-map-container {
+  height: 100%;
+  min-height: 20rem;
+  width: 100%;
+}

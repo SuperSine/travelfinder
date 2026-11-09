@@ -1,0 +1,35 @@
+.chat-panel {
+  border-bottom: 1px solid var(--color-border);
+  padding: 1rem;
+}
+
+.chat-panel__messages {
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.chat-panel__user-message {
+  text-align: right;
+}
+
+.chat-panel__clarification {
+  padding: 0.5rem;
+  border-radius: var(--radius-md);
+  background: var(--color-warning-wash, #fffbeb);
+}
+
+.chat-panel__error {
+  padding: 0.5rem;
+  border-radius: var(--radius-md);
+  background: var(--color-negative-wash, #fef2f2);
+  color: var(--color-text-negative, #991b1b);
+}
+
+.chat-panel__compose {
+  align-items: flex-end;
+}
+
+.chat-panel__textarea {
+  flex: 1;
+  min-width: 0;
+}
